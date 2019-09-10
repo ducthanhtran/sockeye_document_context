@@ -148,3 +148,11 @@ for t in {en,de}; do
             > ${TMP_DIR}/newstest201${y}.pre.tok.post.bpe.boundary.de-en.${t}.gz
     done
 done
+
+# Dummy data set (10K training samples) for debugging
+for t in {en,de}; do
+zcat ${TMP_DIR}/news-commentary.pre.tok.post.bpe.boundary.de-en.${t}.gz \
+    | head -n 10000 \
+    | gzip \
+    > ${TMP_DIR}/news-commentary.pre.tok.post.bpe.boundary.10k.de-en.${t}.gz
+done
