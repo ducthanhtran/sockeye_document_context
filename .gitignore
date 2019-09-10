@@ -18,3 +18,4 @@
 .pytest_cache
 tags
 sockeye/__pycache__
+/data_preparation
