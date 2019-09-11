@@ -23,17 +23,130 @@ import random
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from contextlib import ExitStack
-from typing import Any, cast, Dict, Iterator, Iterable, List, Optional, Sequence, Sized, Tuple, Set
+from typing import Any, cast, Dict, Iterator, Iterable, List, Optional, Sequence, Sized, Tuple, Set, Union
 
 import mxnet as mx
 import numpy as np
 
 from . import config
 from . import constants as C
+from . import doc_context
 from . import vocab
 from .utils import check_condition, smart_open, get_tokens, OnlineMeanAndVariance
 
 logger = logging.getLogger(__name__)
+
+
+class BucketDocLevel:
+    def __init__(self,
+                 src_bkt: int,
+                 tar_bkt: int,
+                 src_pre_bkts: Optional[List[int]] = None,
+                 src_nxt_bkts: Optional[List[int]] = None,
+                 tar_pre_bkts: Optional[List[int]] = None,
+                 tar_nxt_bkts: Optional[List[int]] = None) -> None:
+        self.src_bkt = src_bkt
+        self.tar_bkt = tar_bkt
+        self.src_pre_bkts = src_pre_bkts if src_pre_bkts is not None else []
+        self.src_nxt_bkts = src_nxt_bkts if src_nxt_bkts is not None else []
+        self.tar_pre_bkts = tar_pre_bkts if tar_pre_bkts is not None else []
+        self.tar_nxt_bkts = tar_nxt_bkts if tar_nxt_bkts is not None else []
+
+    @staticmethod
+    def create_from_tuple(tup: Tuple[int, ...], window_config: doc_context.WindowConfig) -> 'BucketDocLevel':
+        tup_entries = list(tup)
+
+        src_pre_size, src_nxt_size, tar_pre_size, tar_nxt_size = window_config.sizes
+        sizes = [src_pre_size, 1, src_nxt_size, tar_pre_size, 1, tar_nxt_size]
+
+        bkts = [[] for _ in sizes]
+        for size, bkt in zip(sizes, bkts):
+            bkt[:] = tup_entries[:size]
+            tup_entries[:] = tup_entries[size:]
+
+        return BucketDocLevel(src_bkt=bkts[1][0],
+                              tar_bkt=bkts[4][0],
+                              src_pre_bkts=bkts[0],
+                              src_nxt_bkts=bkts[2],
+                              tar_pre_bkts=bkts[3],
+                              tar_nxt_bkts=bkts[5])
+
+    def to_tuple(self) -> Tuple[int, ...]:
+        combined = self.src_pre_bkts + [self.src_bkt] + self.src_nxt_bkts \
+                   + self.tar_pre_bkts + [self.tar_bkt] + self.tar_nxt_bkts
+        return tuple(combined)
+
+    def fits(self,
+             length_source: int,
+             length_target: int,
+             lengths_src_pre: Optional[List[int]],
+             lengths_src_nxt: Optional[List[int]],
+             lengths_tar_pre: Optional[List[int]],
+             lengths_tar_nxt: Optional[List[int]]) -> bool:
+        """
+        Checks whether bucket can fit given lengths.
+
+        :param length_source: length of current source sentence
+        :param length_target: length of current target sentence
+        :param lengths_src_pre: lengths of previous source sentences
+        :param lengths_src_nxt: lengths of next source sentences
+        :param lengths_tar_pre: lengths of previous target sentences
+        :param lengths_tar_nxt: lengths of next target sentences
+        :return:
+        """
+        if self.src_bkt >= length_source and self.tar_bkt >= length_target:
+            if (self.is_greater_equal(self.src_pre_bkts, lengths_src_pre)
+                    and self.is_greater_equal(self.src_nxt_bkts, lengths_src_nxt)
+                    and self.is_greater_equal(self.tar_pre_bkts, lengths_tar_pre)
+                    and self.is_greater_equal(self.tar_nxt_bkts, lengths_tar_nxt)):
+                return True
+        return False
+
+    @staticmethod
+    def is_greater_equal(bucket: List[int], lengths: Optional[List[int]]) -> bool:
+        if lengths is None:
+            assert len(bucket) == 0
+            return True
+
+        assert len(bucket) == len(lengths)
+        for size, length in zip(bucket, lengths):
+            if size < length:
+                return False
+        return True
+
+    @property
+    def src_len(self) -> int:
+        return self.src_bkt
+
+    @property
+    def tar_len(self) -> int:
+        return self.tar_bkt
+
+    @tar_len.setter
+    def tar_len(self, value) -> None:
+        self.tar_bkt = value
+
+    @property
+    def src_pre_lens(self) -> Tuple[int, ...]:
+        return tuple(self.src_pre_bkts)
+
+    @property
+    def src_nxt_lens(self) -> Tuple[int, ...]:
+        return tuple(self.src_nxt_bkts)
+
+    @property
+    def tar_pre_lens(self) -> Tuple[int, ...]:
+        return tuple(self.tar_pre_bkts)
+
+    @property
+    def tar_nxt_lens(self) -> Tuple[int, ...]:
+        return tuple(self.tar_nxt_bkts)
+
+    def __lt__(self, other):
+        return self.to_tuple() < other.to_tuple()
+
+    def __str__(self):
+        return str(self.to_tuple())
 
 
 def define_buckets(max_seq_len: int, step=10) -> List[int]:
@@ -55,16 +168,22 @@ def define_buckets(max_seq_len: int, step=10) -> List[int]:
 def define_parallel_buckets(max_seq_len_source: int,
                             max_seq_len_target: int,
                             bucket_width: int = 10,
-                            length_ratio: float = 1.0) -> List[Tuple[int, int]]:
+                            length_ratio: float = 1.0,
+                            doc_context_config: Optional[doc_context.DocumentContextConfig] = None) -> \
+        Union[List[Tuple[int, int]],
+              List[BucketDocLevel]]:
     """
     Returns (source, target) buckets up to (max_seq_len_source, max_seq_len_target).  The longer side of the data uses
     steps of bucket_width while the shorter side uses steps scaled down by the average target/source length ratio.  If
     one side reaches its max_seq_len before the other, width of extra buckets on that side is fixed to that max_seq_len.
 
+    If we're using additional document context, then TODO doc
+
     :param max_seq_len_source: Maximum source bucket size.
     :param max_seq_len_target: Maximum target bucket size.
     :param bucket_width: Width of buckets on longer side.
     :param length_ratio: Length ratio of data (target/source).
+    :param doc_context_config: Document context config.
     """
     source_step_size = bucket_width
     target_step_size = bucket_width
@@ -85,9 +204,49 @@ def define_parallel_buckets(max_seq_len_source: int,
     source_buckets = [max(2, b) for b in source_buckets]
     target_buckets = [max(2, b) for b in target_buckets]
     parallel_buckets = list(zip(source_buckets, target_buckets))
+
     # deduplicate for return
     buckets = list(OrderedDict.fromkeys(parallel_buckets))
     buckets.sort()
+
+    # additional data buckets
+    if doc_context_config is not None:
+        window_config = doc_context_config.window_config
+        source_buckets_additional = []  # type: List[int]
+        if window_config.use_source_side:
+            source_buckets_additional = define_buckets(
+                    max_seq_len_source + 1,
+                    step=doc_context_config.bucket_width[0]
+            )
+
+        target_buckets_additional = []  # type: List[int]
+        if window_config.use_target_side:
+            target_buckets_additional = define_buckets(
+                    max_seq_len_target + 1,
+                    step=doc_context_config.bucket_width[1])
+
+        if source_buckets_additional and len(source_buckets_additional) < len(source_buckets):
+            source_buckets_additional += [source_buckets_additional[-1]
+                                          for _ in range(len(source_buckets) - len(source_buckets_additional))]
+        if target_buckets_additional and len(target_buckets_additional) < len(target_buckets):
+            target_buckets_additional += [target_buckets_additional[-1]
+                                          for _ in range(len(target_buckets) - len(target_buckets_additional))]
+
+        source_buckets_additional = [max(2, b) for b in source_buckets_additional]
+        target_buckets_additional = [max(2, b) for b in target_buckets_additional]
+
+        source_pre_buckets = [source_buckets_additional for _ in range(window_config.src_pre)]
+        source_nxt_buckets = [source_buckets_additional for _ in range(window_config.src_nxt)]
+        target_pre_buckets = [target_buckets_additional for _ in range(window_config.tar_pre)]
+        target_nxt_buckets = [target_buckets_additional for _ in range(window_config.tar_nxt)]
+
+        parallel_buckets = list(zip(*source_pre_buckets, source_buckets, *source_nxt_buckets,
+                                    *target_pre_buckets, target_buckets, *target_nxt_buckets))
+        bucket_with_context = list(OrderedDict.fromkeys(parallel_buckets))
+        bucket_with_context.sort()
+
+        bucket_with_context = [BucketDocLevel.create_from_tuple(b, window_config) for b in bucket_with_context]
+        return bucket_with_context
     return buckets
 
 
@@ -794,9 +953,11 @@ def get_training_data_iters(sources: List[str],
                             max_seq_len_target: int,
                             bucketing: bool,
                             bucket_width: int,
-                            allow_empty: bool = False) -> Tuple['BaseParallelSampleIter',
-                                                                Optional['BaseParallelSampleIter'],
-                                                                'DataConfig', 'DataInfo']:
+                            allow_empty: bool = False,
+                            doc_context_config: Optional[doc_context.DocumentContextConfig] = None) -> \
+        Tuple['BaseParallelSampleIter',
+              Optional['BaseParallelSampleIter'],
+              'DataConfig', 'DataInfo']:
     """
     Returns data iterators for training and validation data.
 
@@ -817,6 +978,7 @@ def get_training_data_iters(sources: List[str],
     :param bucketing: Whether to use bucketing.
     :param bucket_width: Size of buckets.
     :param allow_empty: Unless True if no sentences are below or equal to the maximum length an exception is raised.
+    :param doc_context_config: Document context configuration.
     :return: Tuple of (training data iterator, validation data iterator, data config).
     """
     logger.info("===============================")
@@ -832,9 +994,12 @@ def get_training_data_iters(sources: List[str],
                         "Consider increasing %s" % C.TRAINING_ARG_MAX_SEQ_LEN)
 
     # define buckets
+    if doc_context_config is not None:
+        check_condition(bucketing, "We only support bucketing for document-level context NMT at the moment!")
+
     buckets = define_parallel_buckets(max_seq_len_source, max_seq_len_target, bucket_width,
-                                      length_statistics.length_ratio_mean) if bucketing else [
-        (max_seq_len_source, max_seq_len_target)]
+                                      length_statistics.length_ratio_mean, doc_context_config) if bucketing else \
+        [(max_seq_len_source, max_seq_len_target)]
 
     sources_sentences, target_sentences = create_sequence_readers(sources, target, source_vocabs, target_vocab)
 

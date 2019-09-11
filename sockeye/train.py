@@ -41,6 +41,7 @@ from . import convolution
 from . import coverage
 from . import data_io
 from . import decoder
+from . import doc_context
 from . import encoder
 from . import initializer
 from . import loss
@@ -207,6 +208,7 @@ def use_shared_vocab(args: argparse.Namespace) -> bool:
 
 
 def create_data_iters_and_vocabs(args: argparse.Namespace,
+                                 doc_context_config: Optional[doc_context.DocumentContextConfig],
                                  max_seq_len_source: int,
                                  max_seq_len_target: int,
                                  shared_vocab: bool,
@@ -219,6 +221,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
     Create the data iterators and the vocabularies.
 
     :param args: Arguments as returned by argparse.
+    :param doc_context_config: Document context configuration.
     :param max_seq_len_source: Source maximum sequence length.
     :param max_seq_len_target: Target maximum sequence length.
     :param shared_vocab: Whether to create a shared vocabulary.
@@ -243,6 +246,8 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                                                      C.TRAINING_ARG_TARGET,
                                                      C.TRAINING_ARG_PREPARED_DATA)
     if args.prepared_data is not None:
+        if doc_context_config is None:
+            raise NotImplementedError("We do not support prepared data when using context-information data.")
         utils.check_condition(args.source is None and args.target is None, either_raw_or_prepared_error_msg)
         if not resume_training:
             utils.check_condition(args.source_vocab is None and args.target_vocab is None,
@@ -338,7 +343,8 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             max_seq_len_source=max_seq_len_source,
             max_seq_len_target=max_seq_len_target,
             bucketing=not args.no_bucketing,
-            bucket_width=args.bucket_width)
+            bucket_width=args.bucket_width,
+            doc_context_config=doc_context_config)
 
         data_info_fname = os.path.join(output_folder, C.DATA_INFO)
         logger.info("Writing data config to '%s'", data_info_fname)
@@ -807,6 +813,7 @@ def create_optimizer_config(args: argparse.Namespace, source_vocab_sizes: List[i
 def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
+    arguments.add_train_cli_args_doc(params)
     args = params.parse_args()
     train(args)
 
@@ -841,6 +848,19 @@ def train(args: argparse.Namespace) -> training.TrainState:
     logger.info("Adjusting maximum length to reserve space for a BOS/EOS marker. New maximum length: (%d, %d)",
                 max_seq_len_source, max_seq_len_target)
 
+    doc_context_config = doc_context.DocumentContextConfig(method=args.method,
+                                                           window_config=doc_context.WindowConfig(src_pre=args.src_pre,
+                                                                                                  src_nxt=args.src_nxt,
+                                                                                                  tar_pre=args.tar_pre,
+                                                                                                  tar_nxt=args.tar_nxt),
+                                                           source_train=args.source_train_doc,
+                                                           target_train=args.target_train_doc,
+                                                           source_validation=args.source_valid_doc,
+                                                           target_validation=args.target_valid_doc,
+                                                           bucket_width=args.bucket_width_doc)
+    if not doc_context_config.window_config.is_used:
+        doc_context_config = None
+
     with ExitStack() as exit_stack:
         context = utils.determine_context(device_ids=args.device_ids,
                                           use_cpu=args.use_cpu,
@@ -855,6 +875,7 @@ def train(args: argparse.Namespace) -> training.TrainState:
 
         train_iter, eval_iter, config_data, source_vocabs, target_vocab = create_data_iters_and_vocabs(
             args=args,
+            doc_context_config=doc_context_config,
             max_seq_len_source=max_seq_len_source,
             max_seq_len_target=max_seq_len_target,
             shared_vocab=use_shared_vocab(args),

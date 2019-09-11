@@ -24,6 +24,7 @@ import yaml
 
 from . import constants as C
 from . import data_io
+from . import doc_context
 from .lr_scheduler import LearningRateSchedulerFixedStep
 from . import utils
 
@@ -429,6 +430,49 @@ def add_training_io_args(params):
     add_vocab_args(params)
     add_training_output_args(params)
     add_monitoring_args(params)
+    
+    
+def add_training_io_args_doc(params):
+    params = params.add_argument_group("Document context data")
+    params.add_argument('--source-train-doc',
+                        type=regular_file(),
+                        default=None,
+                        help="Source side context data for training data.")
+    params.add_argument('--target-train-doc',
+                        type=regular_file(),
+                        default=None,
+                        help="Target side context data for training data.")
+    params.add_argument('--source-valid-doc',
+                        type=regular_file(),
+                        default=None,
+                        help="Source side context data for validation data.")
+    params.add_argument('--target-valid-doc',
+                        type=regular_file(),
+                        default=None,
+                        help="Target side context data for validation data.")
+
+    params.add_argument('--bucket-width-doc',
+                        type=multiple_values(num_values=2, greater_or_equal=1),
+                        default=(10, 10),
+                        help="Bucketing widths for context sentences, both source and target side."
+                             "Default: (%default)s.")
+
+    params.add_argument('--src-pre',
+                        type=int_greater_or_equal(0),
+                        default=0,
+                        help="Number of previous source sentences in context window.")
+    params.add_argument('--src-nxt',
+                        type=int_greater_or_equal(0),
+                        default=0,
+                        help="Number of next source sentences in context window.")
+    params.add_argument('--tar-pre',
+                        type=int_greater_or_equal(0),
+                        default=0,
+                        help="Number of previous target sentences in context window.")
+    params.add_argument('--tar-nxt',
+                        type=int_greater_or_equal(0),
+                        default=0,
+                        help="Number of next target sentences in context window.")
 
 
 def add_bucketing_args(params):
@@ -791,6 +835,14 @@ def add_model_parameters(params):
                                    "(and all convolutional weight matrices for CNN decoders). Default: %(default)s.")
 
 
+def add_model_parameters_doc(params):
+    model_params = params.add_argument_group("Model configuration regarding document context information.")
+    model_params.add_argument('--method',
+                              default=None,
+                              choices=doc_context.ARCHITECTURE_CHOICES,
+                              help="Architecture type of document context information.")
+
+
 def add_batch_args(params, default_batch_size=4096):
     params.add_argument('--batch-size', '-b',
                         type=int_greater_or_equal(1),
@@ -1119,6 +1171,11 @@ def add_train_cli_args(params):
     add_training_args(params)
     add_device_args(params)
     add_logging_args(params)
+
+
+def add_train_cli_args_doc(params):
+    add_training_io_args_doc(params)
+    add_model_parameters_doc(params)
 
 
 def add_translate_cli_args(params):
