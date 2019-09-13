@@ -29,7 +29,7 @@ import sys
 import tempfile
 import logging
 from contextlib import ExitStack
-from typing import Any, cast, Optional, Dict, List, Tuple
+from typing import Any, cast, Optional, Dict, List, Tuple, Union
 
 import mxnet as mx
 
@@ -213,10 +213,17 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                                  max_seq_len_target: int,
                                  shared_vocab: bool,
                                  resume_training: bool,
-                                 output_folder: str) -> Tuple['data_io.BaseParallelSampleIter',
-                                                              'data_io.BaseParallelSampleIter',
-                                                              'data_io.DataConfig',
-                                                              List[vocab.Vocab], vocab.Vocab]:
+                                 output_folder: str) -> \
+        Union[
+            Tuple['data_io.BaseParallelSampleIter',
+                  'data_io.BaseParallelSampleIter',
+                  'data_io.DataConfig',
+                  List[vocab.Vocab], vocab.Vocab],
+            Tuple['data_io.BaseParallelSampleIterDoc',
+                  'data_io.BaseParallelSampleIterDoc',
+                  'data_io.DataConfigDoc',
+                  List[vocab.Vocab], vocab.Vocab]
+        ]:
     """
     Create the data iterators and the vocabularies.
 

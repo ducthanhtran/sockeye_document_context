@@ -2,10 +2,22 @@ from typing import Optional, Tuple
 
 from . import config
 
+# Architecture choices
 OUTSIDE_DECODER = "outside-decoder"
 INSIDE_DECODER_PARALLEL = "inside-decoder-parallel"
 INSIDE_DECODER_SEQUENTIAL = "inside-decoder-sequential"
 ARCHITECTURE_CHOICES = [OUTSIDE_DECODER, INSIDE_DECODER_PARALLEL, INSIDE_DECODER_SEQUENTIAL]
+
+
+# I/O variable names; for internal computation graph
+SOURCE_PRE_NAME = "source_pre_%d"
+SOURCE_PRE_LENGTH_NAME = "source_pre_length"
+SOURCE_NXT_NAME = "source_nxt_%d"
+SOURCE_NXT_LENGTH_NAME = "source_nxt_length"
+TARGET_PRE_NAME = "target_pre_%d"
+TARGET_PRE_LENGTH_NAME = "target_pre_length"
+TARGET_NXT_NAME = "target_nxt_%d"
+TARGET_NXT_LENGTH_NAME = "target_nxt_length"
 
 
 class WindowConfig(config.Config):
