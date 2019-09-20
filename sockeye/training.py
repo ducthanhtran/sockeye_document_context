@@ -960,7 +960,10 @@ class EarlyStoppingTrainer:
             batch = next_data_batch
             self._step(self.model, batch, checkpoint_interval, metric_train, metric_loss)
             batch_num_samples = batch.data[0].shape[0]
-            batch_num_tokens = batch.data[0].shape[1] * batch_num_samples
+            # subtract target tokens, as sockeye only considers source token for speedometer
+            # batch format: [source, target, (document context_1), ..., (document_context_N)]
+            batch_num_tokens = sum(d.shape[1] * batch_num_samples for d in batch.data) \
+                               - batch.data[1].shape[1] * batch_num_samples
             self.state.updates += 1
             self.state.samples += batch_num_samples
 
