@@ -842,6 +842,77 @@ def add_model_parameters_doc(params):
                               choices=doc_context.ARCHITECTURE_CHOICES,
                               help="Architecture type of document context information.")
 
+    model_params.add_argument('--encoder-doc',
+                              choices=C.ENCODERS,
+                              default=C.TRANSFORMER_TYPE,
+                              help="Type of encoder for context sentences. At the moment, only the "
+                                   "Transformer model is supported. Default: %(default)s.")
+
+    model_params.add_argument('--embed-dropout-doc',
+                              type=float,
+                              default=.0,
+                              help='Dropout probability for all context embeddings. Default: %(default)s.')
+
+    model_params.add_argument('--num-layers-doc',
+                              default=6,
+                              type=int_greater_or_equal(0),
+                              help="Number of context encoder layers.")
+
+    model_params.add_argument('--transformer-model-size-doc',
+                              type=int_greater_or_equal(1),
+                              default=512,
+                              help='Number of hidden units in context transformer layers. Default: %(default)s.')
+    model_params.add_argument('--transformer-attention-heads-doc',
+                              type=int_greater_or_equal(1),
+                              default=8,
+                              help='Number of heads for all self-attention when using transformer layers. '
+                                   'Default: %(default)s.')
+    model_params.add_argument('--transformer-feed-forward-num-hidden-doc',
+                              type=int_greater_or_equal(1),
+                              default=2048,
+                              help='Number of hidden units in transformers feed forward layers. '
+                                   'Default: %(default)s.')
+    model_params.add_argument('--transformer-activation-type-doc',
+                              choices=C.TRANSFORMER_ACTIVATION_TYPES,
+                              default=C.RELU,
+                              help="Type activation to use for each feed forward layer. Default: %(default)s.")
+    model_params.add_argument('--transformer-positional-embedding-type-doc',
+                              choices=C.POSITIONAL_EMBEDDING_TYPES,
+                              default=C.FIXED_POSITIONAL_EMBEDDING,
+                              help='The type of positional embedding. Default: %(default)s.')
+    model_params.add_argument('--transformer-preprocess-doc',
+                              type=str,
+                              default='n',
+                              help='Transformer preprocess sequence for context encoders. Supports three types of '
+                                   'operations: d=dropout, r=residual connection, n=layer normalization. You can '
+                                   'combine in any order, for example: "ndr". '
+                                   'Leave empty to not use any of these operations. '
+                                   'Default: %(default)s.')
+    model_params.add_argument('--transformer-postprocess-doc',
+                              type=str,
+                              default='dr',
+                              help='Transformer postprocess sequence for context encoder. Supports three types of '
+                                   'operations: d=dropout, r=residual connection, n=layer normalization. You can '
+                                   'combine in any order, for example: "ndr". '
+                                   'Leave empty to not use any of these operations. '
+                                   'Default: %(default)s.')
+
+    model_params.add_argument('--transformer-dropout-attention-doc',
+                              type=float,
+                              default=0.1,
+                              help='Dropout probability for multi-head attention in context encoders. '
+                                   'Default: %(default)s.')
+    model_params.add_argument('--transformer-dropout-act-doc',
+                              type=float,
+                              default=0.1,
+                              help='Dropout probability before activation in feed-forward block in context encoders. '
+                                   'Default: %(default)s.')
+    model_params.add_argument('--transformer-dropout-prepost-doc',
+                              type=float,
+                              default=0.1,
+                              help='Dropout probability for pre/postprocessing blocks in context encoders. '
+                                   'Default: %(default)s.')
+
 
 def add_batch_args(params, default_batch_size=4096):
     params.add_argument('--batch-size', '-b',

@@ -10,8 +10,8 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
-
-from typing import Dict, Optional, TYPE_CHECKING
+import ast
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 import mxnet as mx
 import numpy as np
@@ -60,6 +60,18 @@ class TransformerConfig(config.Config):
         self.conv_config = conv_config
         self.use_lhuc = lhuc
         self.dtype = dtype
+
+
+class TransformerConfigWithDocEncoders(config.Config):
+
+    def __init__(self,
+                 transformer_config: TransformerConfig,
+                 doc_config: TransformerConfig,
+                 number_doc_sentences: int) -> None:
+        super().__init__()
+        self.transformer_config = transformer_config
+        self.doc_config = doc_config
+        self.number_doc_sentences = number_doc_sentences
 
 
 class TransformerEncoderBlock:
@@ -351,6 +363,85 @@ def get_variable_length_bias(lengths: mx.sym.Symbol,
     """
     # (batch_size, max_length)
     x = mx.symbol.Custom(data=lengths, max_length=max_length, op_type='variable_length_bias')
+    if num_heads is not None:
+        # (batch_size, heads, max_length) if fold_heads == False else (batch_size * heads, max_length)
+        x = layers.broadcast_to_heads(x, num_heads, ndim=2, fold_heads=fold_heads)
+    return mx.sym.BlockGrad(x, name='%sbias' % name)
+
+
+class VariableLengthBiasExtended(mx.operator.CustomOp):
+    """
+    Returns bias/mask given a matrix of sequence lengths in each row.
+    """
+
+    def __init__(self, max_length: List[int]) -> None:
+        super().__init__()
+        self.max_length = max_length
+
+    def forward(self, is_train, req, in_data, out_data, aux):
+        # lengths: (batch_size, num_additional_input)
+        lengths = in_data[0]
+        dtype = lengths.dtype
+        dtype_str = np.dtype(dtype).name
+
+        # (batch_size, max_length)
+        data = mx.nd.zeros((lengths.shape[0], sum(self.max_length)), dtype=dtype, ctx=lengths.context)
+        start = 0
+        for i, max_length in enumerate(self.max_length):
+            data[:, start:start+max_length] = mx.nd.SequenceMask(data=data[:, start:start+max_length],
+                                                                 use_sequence_length=True,
+                                                                 sequence_length=lengths[:, i],
+                                                                 axis=1,
+                                                                 value=-C.LARGE_VALUES[dtype_str])
+            start += max_length
+        self.assign(out_data[0], req[0], data)
+
+    def backward(self, req, out_grad, in_data, out_data, in_grad, aux):
+        pass
+
+
+@mx.operator.register("variable_length_bias_extended")
+class VariableLengthBiasPropExtended(mx.operator.CustomOpProp):
+
+    def __init__(self, max_length: str) -> None:
+        super().__init__()
+        self.max_length = ast.literal_eval(max_length)
+
+    def list_arguments(self):
+        return ['data']
+
+    def list_outputs(self):
+        return ['output']
+
+    def infer_shape(self, in_shape):
+        batch_size = in_shape[0][0]
+        num_additional_input = in_shape[0][1]
+        return [(batch_size, num_additional_input)], [(batch_size, sum(self.max_length))], []
+
+    def infer_type(self, in_type):
+        return in_type, in_type, []
+
+    def create_operator(self, ctx, shapes, dtypes):
+        return VariableLengthBiasExtended(max_length=self.max_length)
+
+
+def get_variable_length_bias_extended(lengths: mx.sym.Symbol,
+                                      max_length: List[int],
+                                      num_heads: Optional[int] = None,
+                                      fold_heads: bool = True,
+                                      name: str = '') -> mx.sym.Symbol:
+    """
+    Returns bias/mask for a variable sequence length matrix.
+
+    :param lengths: Sequence lengths. Shape: (batch,).
+    :param max_length: Maximum sequence lengths - one for each additional input sequence.
+    :param num_heads: Number of attention heads.
+    :param fold_heads: Whether to fold heads dimension into batch dimension.
+    :param name: Name of symbol.
+    :return: Bias symbol.
+    """
+    # (batch_size, max_length)
+    x = mx.symbol.Custom(data=lengths, max_length=max_length, op_type='variable_length_bias_extended')
     if num_heads is not None:
         # (batch_size, heads, max_length) if fold_heads == False else (batch_size * heads, max_length)
         x = layers.broadcast_to_heads(x, num_heads, ndim=2, fold_heads=fold_heads)

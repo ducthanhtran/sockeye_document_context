@@ -452,6 +452,42 @@ def create_encoder_config(args: argparse.Namespace,
     return config_encoder, encoder_num_hidden
 
 
+def create_encoder_config_doc(args: argparse.Namespace,
+                              max_seq_len_source: int,
+                              max_seq_len_target: int) -> encoder.EncoderConfig:
+    """
+    Create the encoder config for all the additional encoders that are used to compute
+    representations of context sentences. All context encoders are built identically, but
+    have independent parameter sets.
+
+    :param args: Arguments as returned by argparse.
+    :param max_seq_len_source: Maximum source sequence length.
+    :param max_seq_len_target: Maximum target sequence length.
+    :return: The encoder config and the number of hidden units of the encoder.
+    """
+    config_encoder = None  # type: Optional[Config]
+
+    if args.encoder_doc == C.TRANSFORMER_TYPE:
+        config_encoder = transformer.TransformerConfig(
+            model_size=args.transformer_model_size_doc,
+            attention_heads=args.transformer_attention_heads_doc,
+            feed_forward_num_hidden=args.transformer_feed_forward_num_hidden_doc,
+            act_type=args.transformer_activation_type_doc,
+            num_layers=args.num_layers_doc,
+            dropout_attention=args.transformer_dropout_attention_doc,
+            dropout_act=args.transformer_dropout_act_doc,
+            dropout_prepost=args.transformer_dropout_prepost_doc,
+            positional_embedding_type=args.transformer_positional_embedding_type_doc,
+            preprocess_sequence=args.transformer_preprocess_doc,
+            postprocess_sequence=args.transformer_postprocess_doc,
+            max_seq_len_source=max_seq_len_source,
+            max_seq_len_target=max_seq_len_target)
+    else:
+        raise NotImplementedError("We only support Transformer encoders for context sentences at the moment.")
+
+    return config_encoder
+
+
 def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
                           max_seq_len_source: int, max_seq_len_target: int,
                           num_embed_target: int) -> decoder.DecoderConfig:
@@ -630,7 +666,8 @@ def create_model_config(args: argparse.Namespace,
                         target_vocab_size: int,
                         max_seq_len_source: int,
                         max_seq_len_target: int,
-                        config_data: data_io.DataConfig) -> model.ModelConfig:
+                        config_data: data_io.DataConfig,
+                        doc_context_config: Optional[doc_context.DocumentContextConfig]) -> model.ModelConfig:
     """
     Create a ModelConfig from the argument given in the command line.
 
@@ -640,6 +677,7 @@ def create_model_config(args: argparse.Namespace,
     :param max_seq_len_source: Maximum source sequence length.
     :param max_seq_len_target: Maximum target sequence length.
     :param config_data: Data config.
+    :param doc_context_config: Document context configuration.
     :return: The model configuration.
     """
     num_embed_source, num_embed_target = get_num_embed(args)
@@ -698,26 +736,56 @@ def create_model_config(args: argparse.Namespace,
                                   normalization_type=args.loss_normalization_type,
                                   label_smoothing=args.label_smoothing)
 
-    model_config = model.ModelConfig(config_data=config_data,
-                                     vocab_source_size=source_vocab_size,
-                                     vocab_target_size=target_vocab_size,
-                                     config_embed_source=config_embed_source,
-                                     config_embed_target=config_embed_target,
-                                     config_encoder=config_encoder,
-                                     config_decoder=config_decoder,
-                                     config_loss=config_loss,
-                                     weight_tying=args.weight_tying,
-                                     weight_tying_type=args.weight_tying_type if args.weight_tying else None,
-                                     weight_normalization=args.weight_normalization,
-                                     lhuc=args.lhuc is not None)
-    return model_config
+    if doc_context_config is not None:
+        config_embed_source_doc = encoder.EmbeddingConfig(vocab_size=source_vocab_size,
+                                                          num_embed=num_embed_source,
+                                                          dropout=args.embed_dropout_doc)
+        config_embed_target_doc = encoder.EmbeddingConfig(vocab_size=target_vocab_size,
+                                                          num_embed=num_embed_target,
+                                                          dropout=args.embed_dropout_doc)
+        config_encoder_doc = create_encoder_config_doc(args=args,
+                                                       max_seq_len_source=max_seq_len_source,
+                                                       max_seq_len_target=max_seq_len_target)
+        if doc_context_config.method == doc_context.OUTSIDE_DECODER:
+            return model.ModelConfigOutsideDecoder(doc_context_config=doc_context_config,
+                                                   config_data=config_data,
+                                                   vocab_source_size=source_vocab_size,
+                                                   vocab_target_size=target_vocab_size,
+                                                   config_embed_source=config_embed_source,
+                                                   config_embed_target=config_embed_target,
+                                                   config_embed_source_doc=config_embed_source_doc,
+                                                   config_embed_target_doc=config_embed_target_doc,
+                                                   config_encoder=config_encoder,
+                                                   config_encoder_doc=config_encoder_doc,
+                                                   config_decoder=config_decoder,
+                                                   config_loss=config_loss,
+                                                   weight_tying=args.weight_tying if args.weight_tying else None,
+                                                   weight_normalization=args.weight_normalization,
+                                                   lhuc=args.lhuc is not None)
+        else:
+            raise ValueError("Check context-aware architecture selection!")
+    else:
+        return model.ModelConfig(config_data=config_data,
+                                 vocab_source_size=source_vocab_size,
+                                 vocab_target_size=target_vocab_size,
+                                 config_embed_source=config_embed_source,
+                                 config_embed_target=config_embed_target,
+                                 config_encoder=config_encoder,
+                                 config_decoder=config_decoder,
+                                 config_loss=config_loss,
+                                 weight_tying=args.weight_tying,
+                                 weight_tying_type=args.weight_tying_type if args.weight_tying else None,
+                                 weight_normalization=args.weight_normalization,
+                                 lhuc=args.lhuc is not None)
 
 
-def create_training_model(config: model.ModelConfig,
+def create_training_model(config: Union[model.ModelConfig, model.ModelConfigOutsideDecoder],
                           context: List[mx.Context],
                           output_dir: str,
                           train_iter: data_io.BaseParallelSampleIter,
-                          args: argparse.Namespace) -> training.TrainingModel:
+                          args: argparse.Namespace,
+                          doc_context_config: Optional[doc_context.DocumentContextConfig]) -> \
+        Union[training.TrainingModel, training.TrainingModelOutsideDecoder]:
     """
     Create a training model and load the parameters from disk if needed.
 
@@ -726,19 +794,32 @@ def create_training_model(config: model.ModelConfig,
     :param output_dir: Output folder.
     :param train_iter: The training data iterator.
     :param args: Arguments as returned by argparse.
+    :param doc_context_config: Document context configuration.
     :return: The training model.
     """
-    training_model = training.TrainingModel(config=config,
-                                            context=context,
-                                            output_dir=output_dir,
-                                            provide_data=train_iter.provide_data,
-                                            provide_label=train_iter.provide_label,
-                                            default_bucket_key=train_iter.default_bucket_key,
-                                            bucketing=not args.no_bucketing,
-                                            gradient_compression_params=gradient_compression_params(args),
-                                            fixed_param_names=args.fixed_param_names)
-
-    return training_model
+    if doc_context_config is None:
+        return training.TrainingModel(config=config,
+                                      context=context,
+                                      output_dir=output_dir,
+                                      provide_data=train_iter.provide_data,
+                                      provide_label=train_iter.provide_label,
+                                      default_bucket_key=train_iter.default_bucket_key,
+                                      bucketing=not args.no_bucketing,
+                                      gradient_compression_params=gradient_compression_params(args),
+                                      fixed_param_names=args.fixed_param_names)
+    else:
+        if doc_context_config.method == doc_context.OUTSIDE_DECODER:
+            return training.TrainingModelOutsideDecoder(config=config,
+                                                        context=context,
+                                                        output_dir=output_dir,
+                                                        provide_data=train_iter.provide_data,
+                                                        provide_label=train_iter.provide_label,
+                                                        default_bucket_key=train_iter.default_bucket_key,
+                                                        bucketing=not args.no_bucketing,
+                                                        gradient_compression_params=gradient_compression_params(args),
+                                                        fixed_param_names=args.fixed_param_names)
+        else:
+            raise ValueError("Not a valid architecture selection.")
 
 
 def gradient_compression_params(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
@@ -905,14 +986,15 @@ def train(args: argparse.Namespace) -> training.TrainState:
         model_config = create_model_config(args=args,
                                            source_vocab_sizes=source_vocab_sizes, target_vocab_size=target_vocab_size,
                                            max_seq_len_source=max_seq_len_source, max_seq_len_target=max_seq_len_target,
-                                           config_data=config_data)
+                                           config_data=config_data, doc_context_config=doc_context_config)
         model_config.freeze()
 
         training_model = create_training_model(config=model_config,
                                                context=context,
                                                output_dir=output_folder,
                                                train_iter=train_iter,
-                                               args=args)
+                                               args=args,
+                                               doc_context_config=doc_context_config)
 
         # Handle options that override training settings
         min_updates = args.min_updates

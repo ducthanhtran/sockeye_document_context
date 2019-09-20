@@ -3109,8 +3109,8 @@ class BaseParallelSampleIterDoc(mx.io.DataIter):
         self.source_nxt_data_name = source_nxt_data_name
         self.target_pre_data_name = target_pre_data_name
         self.target_nxt_data_name = target_nxt_data_name
-        self.additional_names_formats = [self.source_pre_data_name, self.source_nxt_data_name,
-                                         self.target_pre_data_name, self.target_nxt_data_name]
+        self.context_name_formats = [self.source_pre_data_name, self.source_nxt_data_name,
+                                     self.target_pre_data_name, self.target_nxt_data_name]
         self.num_factors = num_factors
         self.permute = permute
         self.dtype = dtype
@@ -3139,20 +3139,20 @@ class BaseParallelSampleIterDoc(mx.io.DataIter):
         self.data_names = [self.source_data_name, self.target_data_name]
         self.label_names = [self.label_name]
 
-        # add additional sentence data descriptions
-        for window_size, additional_name_format, bucket in zip(self.window_config.sizes,
-                                                               self.additional_names_formats,
-                                                               [self.default_bucket_key.src_pre_lens,
-                                                                self.default_bucket_key.src_nxt_lens,
-                                                                self.default_bucket_key.tar_pre_lens,
-                                                                self.default_bucket_key.tar_nxt_lens]):
+        # Add context sentence data descriptions
+        for window_size, context_name_format, bucket in zip(self.window_config.sizes,
+                                                            self.context_name_formats,
+                                                            [self.default_bucket_key.src_pre_lens,
+                                                             self.default_bucket_key.src_nxt_lens,
+                                                             self.default_bucket_key.tar_pre_lens,
+                                                             self.default_bucket_key.tar_nxt_lens]):
             for i in range(window_size):
                 self.provide_data.append(
-                        mx.io.DataDesc(name=additional_name_format % i,
+                        mx.io.DataDesc(name=context_name_format % i,
                                        shape=(last_batch_size, bucket[i], 1),
                                        layout=C.BATCH_MAJOR)
                 )
-                self.data_names.append(additional_name_format % i)
+                self.data_names.append(context_name_format % i)
 
     @abstractmethod
     def reset(self):

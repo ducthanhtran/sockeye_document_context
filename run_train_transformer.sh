@@ -7,8 +7,8 @@ TRAIN_T="${DIR}/news-commentary.pre.tok.post.bpe.boundary.10k.de-en.de.gz"
 DEV_S="${DIR}/newstest2015.pre.tok.post.bpe.boundary.de-en.en.gz"
 DEV_T="${DIR}/newstest2015.pre.tok.post.bpe.boundary.de-en.de.gz"
 
-ls ${TRAIN_S} ${TRAIN_T} ${DEV_S} ${DEV_T}
 
+ls ${TRAIN_S} ${TRAIN_T} ${DEV_S} ${DEV_T}
 rm -rf ${OUT}
 
 
@@ -25,9 +25,13 @@ python -m sockeye.train -s "${TRAIN_S}" \
                         --checkpoint-frequency 200 \
                         --encoder transformer \
                         --num-layers 2:2 \
+                        --num-layers-doc 2 \
                         --transformer-model-size 4 \
+                        --transformer-model-size-doc 4 \
                         --transformer-attention-heads 2 \
+                        --transformer-attention-heads-doc 2 \
                         --transformer-feed-forward-num-hidden 8 \
+                        --transformer-feed-forward-num-hidden-doc 8 \
                         --transformer-preprocess n \
                         --transformer-postprocess dr \
                         --transformer-dropout-prepost 0.1 \
