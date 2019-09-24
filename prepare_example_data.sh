@@ -149,10 +149,14 @@ for t in {en,de}; do
     done
 done
 
-# Dummy data set (10K training samples) for debugging
+# Dummy data set (10K training samples and 200 test ones) for debugging
 for t in {en,de}; do
 zcat ${TMP_DIR}/news-commentary.pre.tok.post.bpe.boundary.de-en.${t}.gz \
     | head -n 10000 \
     | gzip \
     > ${TMP_DIR}/news-commentary.pre.tok.post.bpe.boundary.10k.de-en.${t}.gz
+zcat ${TMP_DIR}/newstest2018.pre.tok.post.bpe.de-en.${t}.gz \
+    | head -n 200 \
+    | gzip \
+    > ${TMP_DIR}/newstest2018.pre.tok.post.bpe.boundary.200.de-en.${t}.gz
 done

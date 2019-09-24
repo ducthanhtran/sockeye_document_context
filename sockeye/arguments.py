@@ -1255,6 +1255,10 @@ def add_translate_cli_args(params):
     add_logging_args(params)
 
 
+def add_translate_cli_args_doc(params):
+    add_inference_args_doc(params)
+
+
 def add_score_cli_args(params):
     add_training_data_args(params, required=False)
     add_vocab_args(params)
@@ -1474,6 +1478,24 @@ def add_inference_args(params):
                                type=str,
                                help='EXPERIMENTAL: may be changed or removed in future. Overrides training dtype of '
                                     'encoders and decoders during inference. Default: %(default)s')
+
+
+def add_inference_args_doc(params):
+    decode_params = params.add_argument_group("Inference parameters regarding context sentences.")
+
+    decode_params.add_argument('--method',
+                               choices=doc_context.ARCHITECTURE_CHOICES,
+                               default=None,
+                               help="Architecture type of document context information.")
+
+    decode_params.add_argument('--input-source-doc',
+                               type=regular_file(),
+                               default=None,
+                               help="Source side context data for inference.")
+    decode_params.add_argument('--input-target-doc',
+                               type=regular_file(),
+                               default=None,
+                               help="Target side context data for inference.")
 
 
 def add_evaluate_args(params):

@@ -471,7 +471,7 @@ class TrainingModelOutsideDecoder(model.SockeyeModelOutsideDecoder):
             Also returns data and label names for the BucketingModule.
             """
             source_seq_len, target_seq_len = bucket.src_len, bucket.tar_len
-            lens_doc = [bucket.src_pre_lens, bucket.src_nxt_lens, bucket.tar_pre_lens, bucket.tar_nxt_lens]
+            bucket_lengths_doc = [bucket.src_pre_lens, bucket.src_nxt_lens, bucket.tar_pre_lens, bucket.tar_nxt_lens]
 
             # source embedding
             (source_embed,
@@ -496,7 +496,7 @@ class TrainingModelOutsideDecoder(model.SockeyeModelOutsideDecoder):
             doc_enc_seq_lengths = []  # type: List[int]
             for i, (doc_sentences, doc_lengths, doc_seq_lens, embedder, encoders) in enumerate(zip(sentences_doc,
                                                                                                    lengths_doc,
-                                                                                                   lens_doc,
+                                                                                                   bucket_lengths_doc,
                                                                                                    embeddings_doc,
                                                                                                    encoders_doc)):
                 for j, (doc_sent, doc_length, doc_seq_len) in enumerate(zip(doc_sentences, doc_lengths, doc_seq_lens)):

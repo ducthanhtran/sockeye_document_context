@@ -413,7 +413,7 @@ class SockeyeModelOutsideDecoder:
         :param fname: Path to load model configuration from.
         :return: Model configuration.
         """
-        config = ModelConfig.load(fname)
+        config = ModelConfigOutsideDecoder.load(fname)
         logger.info('ModelConfig loaded from "%s"', fname)
         return cast(ModelConfigOutsideDecoder, config)  # type: ignore
 
