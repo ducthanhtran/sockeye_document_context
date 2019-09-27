@@ -147,7 +147,7 @@ class TransformerConfig(config.Config):
         self.dtype = dtype
 
 
-class TransformerConfigInsideDecoder(TransformerConfig):
+class TransformerConfigInsideDecoder(config.Config):
 
     def __init__(self,
                  use_parallel_attention: bool,
@@ -173,13 +173,24 @@ class TransformerConfigInsideDecoder(TransformerConfig):
                  conv_config: Optional['encoder.ConvolutionalEmbeddingConfig'] = None,
                  lhuc: bool = False,
                  dtype: str = C.DTYPE_FP32) -> None:  # type: ignore
-        super().__init__(model_size=model_size, attention_heads=attention_heads,
-                         feed_forward_num_hidden=feed_forward_num_hidden,
-                         act_type=act_type, num_layers=num_layers, dropout_attention=dropout_attention,
-                         dropout_act=dropout_act, dropout_prepost=dropout_prepost,
-                         positional_embedding_type=positional_embedding_type, preprocess_sequence=preprocess_sequence,
-                         postprocess_sequence=postprocess_sequence, max_seq_len_source=max_seq_len_source,
-                         max_seq_len_target=max_seq_len_target, conv_config=conv_config, lhuc=lhuc, dtype=dtype)
+        super().__init__()
+        self.model_size = model_size
+        self.attention_heads = attention_heads
+        self.feed_forward_num_hidden = feed_forward_num_hidden
+        self.act_type = act_type
+        self.num_layers = num_layers
+        self.dropout_attention = dropout_attention
+        self.dropout_act = dropout_act
+        self.dropout_prepost = dropout_prepost
+        self.positional_embedding_type = positional_embedding_type
+        self.preprocess_sequence = preprocess_sequence
+        self.postprocess_sequence = postprocess_sequence
+        self.max_seq_len_source = max_seq_len_source
+        self.max_seq_len_target = max_seq_len_target
+        self.conv_config = conv_config
+        self.use_lhuc = lhuc
+        self.dtype = dtype
+
         self.use_parallel_attention = use_parallel_attention
         self.attention_heads_doc = attention_heads_doc
         self.dropout_attention_doc = dropout_attention_doc

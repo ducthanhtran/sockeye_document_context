@@ -40,6 +40,9 @@ TRANSFORMER_INSIDE_CONTEXT_DECODER_PREFIX = "decoder_transformer_inside_context"
 # Prefixes for neural modules
 ENCODER_PREFIX = "doc_context_enc_"
 
+# Shape names for inference - decoder module
+DOC_ENCODED_NAME = "doc_encoded"
+DOC_ENCODED_LENGTH_NAME = "doc_encoded_length"
 
 # Names for gating mechanism
 GATE_LINEAR = "gate_linear"

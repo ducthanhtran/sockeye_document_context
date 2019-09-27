@@ -98,13 +98,14 @@ def run_translate(args: argparse.Namespace):
         store_beam = args.output_type == C.OUTPUT_HANDLER_BEAM_STORE
 
         translator_selection = {
-            doc_context.OUTSIDE_DECODER: inference.TranslatorOutsideDecoder
+            doc_context.OUTSIDE_DECODER: inference.TranslatorOutsideDecoder,
+            doc_context.INSIDE_DECODER_PARALLEL: inference.TranslatorInsideDecoder,
+            doc_context.INSIDE_DECODER_SEQUENTIAL: inference.TranslatorInsideDecoder
         }
         selected_translator = translator_selection.get(args.method, inference.Translator)
         translator = selected_translator(context=context,
                                          ensemble_mode=args.ensemble_mode,
                                          bucket_source_width=args.bucket_width,
-                                         bucket_target_width=args.bucket_width,
                                          length_penalty=inference.LengthPenalty(args.length_penalty_alpha,
                                                                                 args.length_penalty_beta),
                                          beam_prune=args.beam_prune,
@@ -171,7 +172,7 @@ def make_inputs(input_file: Optional[str],
 
 
 def make_inputs_doc(input_file: Optional[str],
-                    translator: Union[inference.TranslatorOutsideDecoder],
+                    translator: Union[inference.TranslatorOutsideDecoder, inference.InferenceModelInsideDecoder],
                     input_is_json: bool,
                     input_factors: Optional[List[str]] = None,
                     input_source_doc: Optional[str] = None,
@@ -389,12 +390,15 @@ def read_and_translate(translator: inference.Translator,
             chunk_time = translate(output_handler, chunk, translator)
             total_lines += len(chunk)
             total_time += chunk_time
-    elif isinstance(translator, inference.TranslatorOutsideDecoder):
+    elif (isinstance(translator, inference.TranslatorOutsideDecoder)
+          or isinstance(translator, inference.TranslatorInsideDecoder)):
         for chunk in grouper(make_inputs_doc(input_file, translator, input_is_json, input_factors,
                                              input_source_doc, input_target_doc), size=chunk_size):
             chunk_time = translate(output_handler, chunk, translator)
             total_lines += len(chunk)
             total_time += chunk_time
+    else:
+        raise ValueError("Something went wrong")
 
     if total_lines != 0:
         logger.info("Processed %d lines. Total time: %.4f, sec/sent: %.4f, sent/sec: %.4f",
@@ -406,7 +410,9 @@ def read_and_translate(translator: inference.Translator,
 def translate(output_handler: OutputHandler,
               trans_inputs: Union[List[inference.TranslatorInput],
                                   List[inference.TranslatorInputDoc]],
-              translator: Union[inference.Translator, inference.TranslatorOutsideDecoder]) -> float:
+              translator: Union[inference.Translator,
+                                inference.TranslatorOutsideDecoder,
+                                inference.InferenceModelInsideDecoder]) -> float:
     """
     Translates each line from source_data, calling output handler after translating a batch.
 

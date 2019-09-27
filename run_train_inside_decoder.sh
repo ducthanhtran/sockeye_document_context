@@ -31,7 +31,6 @@ python -m sockeye.train -s "${TRAIN_S}" \
                         --transformer-attention-heads 2 \
                         --transformer-attention-heads-doc 2 \
                         --transformer-feed-forward-num-hidden 8 \
-                        --transformer-feed-forward-num-hidden-doc 8 \
                         --transformer-preprocess n \
                         --transformer-postprocess dr \
                         --transformer-dropout-prepost 0.1 \

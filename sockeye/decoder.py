@@ -548,20 +548,36 @@ class TransformerDecoderInsideContext(Decoder):
                     target_embed_prev: mx.sym.Symbol,
                     source_encoded_max_length: int,
                     *states: mx.sym.Symbol) -> Tuple[mx.sym.Symbol, mx.sym.Symbol, List[mx.sym.Symbol]]:
+       raise NotImplementedError("use decode_step_doc instead")
+
+    def decode_step_doc(self,
+                        step: int,
+                        target_embed_prev: mx.sym.Symbol,
+                        source_encoded_max_length: int,
+                        doc_encoded_max_lengths: List[int],
+                        *states: mx.sym.Symbol) -> Tuple[mx.sym.Symbol, mx.sym.Symbol, List[mx.sym.Symbol]]:
         """
         Decodes a single time step given the current step, the previous embedded target word,
         and previous decoder states.
+        We further include context lengths for which computations are performed in the second attention component.
+
         Returns decoder representation for the next prediction, attention probabilities, and next decoder states.
         Implementations can maintain an arbitrary number of states.
 
         :param step: Global step of inference procedure, starts with 1.
         :param target_embed_prev: Previous target word embedding. Shape: (batch_size, target_num_embed).
         :param source_encoded_max_length: Length of encoded source time dimension.
+        :param doc_encoded_max_lengths: Lengths of additional context sentence regarding time dimensions.
         :param states: Arbitrary list of decoder states.
         :return: logit inputs, attention probabilities, next decoder states.
         """
-        # for step > 1, states contains source_encoded, source_encoded_lengths, and cache tensors.
-        source_encoded, source_encoded_lengths, *cache = states  # type: ignore
+        # for step > 1, states contains source_encoded, source_encoded_lengths,
+        # additional_encoded, additional_encoded_lengths and cache tensors.
+        (source_encoded,
+         source_encoded_lengths,
+         doc_encoded,
+         doc_encoded_lengths,
+         *cache) = states  # type: ignore
 
         # symbolic indices of the previous word
         indices = mx.sym.arange(start=step - 1, stop=step, step=1, name='indices')
@@ -579,18 +595,29 @@ class TransformerDecoderInsideContext(Decoder):
         # (batch_size * heads, 1, max_length)
         source_bias = mx.sym.expand_dims(source_bias, axis=1)
 
+        # (batch_size * heads, max_length)
+        doc_bias = transformer.get_variable_length_bias_extended(lengths=doc_encoded_lengths,
+                                                                 max_length=doc_encoded_max_lengths,
+                                                                 num_heads=self.config.attention_heads_doc,
+                                                                 fold_heads=True,
+                                                                 name="%sdoc_bias" % self.prefix)
+        # (batch_size * heads, 1, max_length)
+        doc_bias = mx.sym.expand_dims(doc_bias, axis=1)
+
         # auto-regressive bias for last position in sequence
         # (1, target_max_length, target_max_length)
         target_bias = transformer.get_autoregressive_bias(step, name="%sbias" % self.prefix)
         target_bias = mx.sym.slice_axis(target_bias, axis=1, begin=-1, end=step)
 
-        new_states = [source_encoded, source_encoded_lengths]
+        new_states = [source_encoded, source_encoded_lengths, doc_encoded, doc_encoded_lengths]
         layer_caches = self._get_cache_per_layer(cast(List[mx.sym.Symbol], cache))
         for layer, layer_cache in zip(self.layers, layer_caches):
             target = layer(target=target,
                            target_bias=target_bias,
                            source=source_encoded,
                            source_bias=source_bias,
+                           doc=doc_encoded,
+                           doc_bias=doc_bias,
                            cache=layer_cache)
             # store updated keys and values in states list.
             # (layer.__call__() has the side-effect of updating contents of layer_cache)
@@ -633,16 +660,30 @@ class TransformerDecoderInsideContext(Decoder):
                     source_encoded: mx.sym.Symbol,
                     source_encoded_lengths: mx.sym.Symbol,
                     source_encoded_max_length: int) -> List[mx.sym.Symbol]:
+        raise NotImplementedError("Use init_states_doc instead")
+
+    def init_states_doc(self,
+                        source_encoded: mx.sym.Symbol,
+                        source_encoded_lengths: mx.sym.Symbol,
+                        source_encoded_max_length: int,
+                        doc_encoded: mx.sym.Symbol,
+                        doc_encoded_lengths: mx.sym.Symbol,
+                        doc_encoded_max_lengths: List[int]) -> List[mx.sym.Symbol]:
         """
-        Returns a list of symbolic states that represent the initial states of this decoder.
-        Used for inference.
+        Returns a list of symbolic states that represent the initial states of this decoder, including
+        context information ones. Used for inference.
+
+        # TODO: shapes of doc data
 
         :param source_encoded: Encoded source. Shape: (batch_size, source_encoded_max_length, encoder_depth).
         :param source_encoded_lengths: Lengths of encoded source sequences. Shape: (batch_size,).
         :param source_encoded_max_length: Size of encoder time dimension.
+        :param doc_encoded:
+        :param doc_encoded_lengths:
+        :param doc_encoded_max_lengths:
         :return: List of symbolic initial states.
         """
-        return [source_encoded, source_encoded_lengths]
+        return [source_encoded, source_encoded_lengths, doc_encoded, doc_encoded_lengths]
 
     def state_variables(self, target_max_length: int) -> List[mx.sym.Symbol]:
         """
@@ -652,7 +693,9 @@ class TransformerDecoderInsideContext(Decoder):
         :return: List of symbolic variables.
         """
         variables = [mx.sym.Variable(C.SOURCE_ENCODED_NAME),
-                     mx.sym.Variable(C.SOURCE_LENGTH_NAME)]
+                     mx.sym.Variable(C.SOURCE_LENGTH_NAME),
+                     mx.sym.Variable(doc_context.DOC_ENCODED_NAME),
+                     mx.sym.Variable(doc_context.DOC_ENCODED_LENGTH_NAME)]
         if target_max_length > 1:  # no cache for initial decoder step
             for l in range(len(self.layers)):
                 variables.append(mx.sym.Variable('cache_l%d_k' % l))
@@ -664,20 +707,42 @@ class TransformerDecoderInsideContext(Decoder):
                      target_max_length: int,
                      source_encoded_max_length: int,
                      source_encoded_depth: int) -> List[mx.io.DataDesc]:
+        raise NotImplementedError("Use state_shapes_doc instead")
+
+    def state_shapes_doc(self,
+                         batch_size: int,
+                         target_max_length: int,
+                         source_encoded_max_length: int,
+                         source_encoded_depth: int,
+                         doc_encoded_max_length: int,
+                         doc_encoded_depth: int,
+                         num_additional_inputs: int) -> List[mx.io.DataDesc]:
         """
-        Returns a list of shape descriptions given batch size, encoded source max length and encoded source depth.
+        Returns a list of shape descriptions given batch size, encoded source max length and encoded source depth,
+        encoded context max lengths as well as their depth.
         Used for inference.
 
         :param batch_size: Batch size during inference.
         :param target_max_length: Current target sequence length.
         :param source_encoded_max_length: Size of encoder time dimension.
         :param source_encoded_depth: Depth of encoded source.
+        :param doc_encoded_max_length: Size of document context data time dimension.
+        :param doc_encoded_depth: Depth of document context data depth.
+        :param num_additional_inputs: Context window size, that is, number of context sentences.
         :return: List of shape descriptions.
         """
-        shapes = [mx.io.DataDesc(C.SOURCE_ENCODED_NAME,
-                                 (batch_size, source_encoded_max_length, source_encoded_depth),
+        shapes = [mx.io.DataDesc(name=C.SOURCE_ENCODED_NAME,
+                                 shape=(batch_size, source_encoded_max_length, source_encoded_depth),
                                  layout=C.BATCH_MAJOR),
-                  mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size,), layout="N")]
+                  mx.io.DataDesc(C.SOURCE_LENGTH_NAME,
+                                 shape=(batch_size,),
+                                 layout="N"),
+                  mx.io.DataDesc(name=doc_context.DOC_ENCODED_NAME,
+                                 shape=(batch_size, doc_encoded_max_length, doc_encoded_depth),
+                                 layout=C.BATCH_MAJOR),
+                  mx.io.DataDesc(name=doc_context.DOC_ENCODED_LENGTH_NAME,
+                                 shape=(batch_size, num_additional_inputs),
+                                 layout="NT")]
 
         if target_max_length > 1:  # no cache for initial decoder step
             for l in range(len(self.layers)):

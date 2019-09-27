@@ -664,16 +664,16 @@ class SockeyeModelInsideDecoder:
         logger.info('Saved config to "%s"', fname)
 
     @staticmethod
-    def load_config(fname: str) -> ModelConfigOutsideDecoder:
+    def load_config(fname: str) -> ModelConfigInsideDecoder:
         """
         Loads model configuration.
 
         :param fname: Path to load model configuration from.
         :return: Model configuration.
         """
-        config = ModelConfigOutsideDecoder.load(fname)
+        config = ModelConfigInsideDecoder.load(fname)
         logger.info('ModelConfig loaded from "%s"', fname)
-        return cast(ModelConfigOutsideDecoder, config)  # type: ignore
+        return cast(ModelConfigInsideDecoder, config)  # type: ignore
 
     def save_params_to_file(self, fname: str):
         """
