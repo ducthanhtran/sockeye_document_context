@@ -451,10 +451,8 @@ class TransformerDecoderInsideContext(Decoder):
         super().__init__(config.dtype)
         self.config = config
         self.prefix = prefix
-        if self.config.use_parallel_attention:
-            logger.info("\tUsing parallel attention")
-        else:
-            logger.info("\tUsing sequential attention")
+        type_string = "parallel" if self.config.use_parallel_attention else "sequential"
+        logger.info("\t\tInsideDecoder using {} attention".format(type_string))
 
         self.layers = [transformer.TransformerDecoderBlockInsideContext(
             config, prefix="%s%d_" % (prefix, i)) for i in range(config.num_layers)]

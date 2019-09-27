@@ -22,6 +22,7 @@ import os
 import time
 from collections import defaultdict
 from functools import lru_cache, partial
+from itertools import zip_longest
 from typing import Callable, Dict, Generator, List, NamedTuple, Optional, Tuple, Union, Set, Any
 
 import mxnet as mx
@@ -549,7 +550,8 @@ class InferenceModelOutsideDecoder(model.SockeyeModelOutsideDecoder):
             bucket_lengths_doc = [bucket.src_pre_lens, bucket.src_nxt_lens, bucket.tar_pre_lens, bucket.tar_nxt_lens]
             embeddings_doc = [self.embedding_doc_source] * 2 + [self.embedding_doc_target] * 2
             encoders_doc = [self.encoder_doc_source_pre, self.encoder_doc_source_nxt,
-                            self.encoder_doc_target_pre, self.encoder_doc_target_nxt]
+                            self.encoder_doc_target_pre, self.encoder_doc_target_nxt] \
+                            if self.config.config_encoder_doc.num_layers > 0 else []
 
             # source embedding
             (source_embed,
@@ -567,11 +569,12 @@ class InferenceModelOutsideDecoder(model.SockeyeModelOutsideDecoder):
             doc_enc = []  # type: List[mx.sym.Symbol]
             doc_enc_lengths = []  # type: List[mx.sym.Symbol]
             doc_enc_seq_lengths = []  # type: List[int]
-            for i, (doc_sentences, doc_lengths, doc_seq_lens, embedder, encoders) in enumerate(zip(sentences_doc,
-                                                                                                   lengths_doc,
-                                                                                                   bucket_lengths_doc,
-                                                                                                   embeddings_doc,
-                                                                                                   encoders_doc)):
+            for i, (doc_sentences, doc_lengths, doc_seq_lens, embedder, encoders) \
+                    in enumerate(zip_longest(sentences_doc,
+                                             lengths_doc,
+                                             bucket_lengths_doc,
+                                             embeddings_doc,
+                                             encoders_doc)):
                 for j, (doc_sent, doc_length, doc_seq_len) in enumerate(zip(doc_sentences, doc_lengths, doc_seq_lens)):
                     (doc_encoded,
                      doc_encoded_length,
@@ -990,7 +993,8 @@ class InferenceModelInsideDecoder(model.SockeyeModelInsideDecoder):
             bucket_lengths_doc = [bucket.src_pre_lens, bucket.src_nxt_lens, bucket.tar_pre_lens, bucket.tar_nxt_lens]
             embeddings_doc = [self.embedding_doc_source] * 2 + [self.embedding_doc_target] * 2
             encoders_doc = [self.encoder_doc_source_pre, self.encoder_doc_source_nxt,
-                            self.encoder_doc_target_pre, self.encoder_doc_target_nxt]
+                            self.encoder_doc_target_pre, self.encoder_doc_target_nxt] \
+                            if self.config.config_encoder_doc.num_layers > 0 else []
 
             # source embedding
             (source_embed,
@@ -1008,11 +1012,12 @@ class InferenceModelInsideDecoder(model.SockeyeModelInsideDecoder):
             doc_enc = []  # type: List[mx.sym.Symbol]
             doc_enc_lengths = []  # type: List[mx.sym.Symbol]
             doc_enc_seq_lengths = []  # type: List[int]
-            for i, (doc_sentences, doc_lengths, doc_seq_lens, embedder, encoders) in enumerate(zip(sentences_doc,
-                                                                                                   lengths_doc,
-                                                                                                   bucket_lengths_doc,
-                                                                                                   embeddings_doc,
-                                                                                                   encoders_doc)):
+            for i, (doc_sentences, doc_lengths, doc_seq_lens, embedder, encoders) \
+                    in enumerate(zip_longest(sentences_doc,
+                                             lengths_doc,
+                                             bucket_lengths_doc,
+                                             embeddings_doc,
+                                             encoders_doc)):
                 for j, (doc_sent, doc_length, doc_seq_len) in enumerate(zip(doc_sentences, doc_lengths, doc_seq_lens)):
                     (doc_encoded,
                      doc_encoded_length,

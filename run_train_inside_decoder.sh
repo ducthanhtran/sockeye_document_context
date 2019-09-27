@@ -25,7 +25,7 @@ python -m sockeye.train -s "${TRAIN_S}" \
                         --checkpoint-frequency 200 \
                         --encoder transformer \
                         --num-layers 2:2 \
-                        --num-layers-doc 2 \
+                        --num-layers-doc 0 \
                         --transformer-model-size 4 \
                         --transformer-model-size-doc 4 \
                         --transformer-attention-heads 2 \
