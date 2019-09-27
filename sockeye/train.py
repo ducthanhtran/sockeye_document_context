@@ -505,7 +505,38 @@ def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
 
     config_decoder = None  # type: Optional[Config]
 
-    if args.decoder == C.TRANSFORMER_TYPE:
+    if args.method in doc_context.INSIDE_DECODERS:
+        if args.decoder_only:
+            raise NotImplementedError()
+        _, decoder_transformer_preprocess = args.transformer_preprocess
+        _, decoder_transformer_postprocess = args.transformer_postprocess
+        config_decoder = transformer.TransformerConfigInsideDecoder(
+            use_parallel_attention=args.method == doc_context.INSIDE_DECODER_PARALLEL,
+            model_size=args.transformer_model_size[1],
+            attention_heads=args.transformer_attention_heads[1],
+            attention_heads_doc=args.transformer_attention_heads_doc,
+            feed_forward_num_hidden=args.transformer_feed_forward_num_hidden[1],
+            act_type=args.transformer_activation_type,
+            num_layers=decoder_num_layers,
+            dropout_attention=args.transformer_dropout_attention,
+            dropout_attention_doc=args.transformer_dropout_attention_doc,
+            dropout_act=args.transformer_dropout_act,
+            dropout_act_doc=args.transformer_dropout_act_doc,
+            dropout_prepost=args.transformer_dropout_prepost,
+            dropout_prepost_doc=args.transformer_dropout_prepost_doc,
+            positional_embedding_type=args.transformer_positional_embedding_type,
+            preprocess_sequence=decoder_transformer_preprocess,
+            preprocess_sequence_doc=args.transformer_preprocess_doc,
+            postprocess_sequence=decoder_transformer_postprocess,
+            postprocess_sequence_doc=args.transformer_preprocess_doc,
+            max_seq_len_source=max_seq_len_source,
+            max_seq_len_target=max_seq_len_target,
+            conv_config=None,
+            lhuc=args.lhuc is not None and (C.LHUC_DECODER in args.lhuc or C.LHUC_ALL in args.lhuc)
+        )
+        logger.info("Ignored --decoder architecture and used {} instead due to --method argument.".format(args.method))
+
+    elif args.decoder == C.TRANSFORMER_TYPE:
         if args.decoder_only:
             raise NotImplementedError()
         _, decoder_transformer_preprocess = args.transformer_preprocess
@@ -762,6 +793,25 @@ def create_model_config(args: argparse.Namespace,
                                                    weight_tying=args.weight_tying if args.weight_tying else None,
                                                    weight_normalization=args.weight_normalization,
                                                    lhuc=args.lhuc is not None)
+        elif doc_context_config.method in doc_context.INSIDE_DECODERS:
+            check_condition(isinstance(config_decoder, transformer.TransformerConfigInsideDecoder),
+                            "Invalid decoder configuration.")
+
+            return model.ModelConfigInsideDecoder(doc_context_config=doc_context_config,
+                                                  config_data=config_data,
+                                                  vocab_source_size=source_vocab_size,
+                                                  vocab_target_size=target_vocab_size,
+                                                  config_embed_source=config_embed_source,
+                                                  config_embed_target=config_embed_target,
+                                                  config_embed_source_doc=config_embed_source_doc,
+                                                  config_embed_target_doc=config_embed_target_doc,
+                                                  config_encoder=config_encoder,
+                                                  config_encoder_doc=config_encoder_doc,
+                                                  config_decoder=config_decoder,
+                                                  config_loss=config_loss,
+                                                  weight_tying=args.weight_tying if args.weight_tying else None,
+                                                  weight_normalization=args.weight_normalization,
+                                                  lhuc=args.lhuc is not None)
         else:
             raise ValueError("Check context-aware architecture selection!")
     else:
@@ -785,7 +835,9 @@ def create_training_model(config: Union[model.ModelConfig, model.ModelConfigOuts
                           train_iter: data_io.BaseParallelSampleIter,
                           args: argparse.Namespace,
                           doc_context_config: Optional[doc_context.DocumentContextConfig]) -> \
-        Union[training.TrainingModel, training.TrainingModelOutsideDecoder]:
+        Union[training.TrainingModel,
+              training.TrainingModelOutsideDecoder,
+              training.TrainingModelInsideDecoder]:
     """
     Create a training model and load the parameters from disk if needed.
 
@@ -818,6 +870,16 @@ def create_training_model(config: Union[model.ModelConfig, model.ModelConfigOuts
                                                         bucketing=not args.no_bucketing,
                                                         gradient_compression_params=gradient_compression_params(args),
                                                         fixed_param_names=args.fixed_param_names)
+        elif doc_context_config.method in doc_context.INSIDE_DECODERS:
+            return training.TrainingModelInsideDecoder(config=config,
+                                                       context=context,
+                                                       output_dir=output_dir,
+                                                       provide_data=train_iter.provide_data,
+                                                       provide_label=train_iter.provide_label,
+                                                       default_bucket_key=train_iter.default_bucket_key,
+                                                       bucketing=not args.no_bucketing,
+                                                       gradient_compression_params=gradient_compression_params(args),
+                                                       fixed_param_names=args.fixed_param_names)
         else:
             raise ValueError("Not a valid architecture selection.")
 
