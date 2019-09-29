@@ -6,7 +6,7 @@ We have used [sockeye version 1.18.85](https://github.com/awslabs/sockeye/releas
 
 * [Installation](https://github.com/ducthanhtran/sockeye_document_context#Installation)
 * [Training](https://github.com/ducthanhtran/sockeye_document_context#Training)
-    * [Context-aware Architectures using multiple Encoders](https://github.com/ducthanhtran/sockeye_document_context#Context-aware%20Architectures%20using%20multiple%20Encoders)
+    * [Context-aware Architectures using multiple Encoders](https://github.com/ducthanhtran/sockeye_document_context#context-aware-architectures-using-multiple-encoders)
 * [Inference](https://github.com/ducthanhtran/sockeye_document_context#Inference)
 * [Citation](https://github.com/ducthanhtran/sockeye_document_context#Citation)
 * [Parameters](https://github.com/ducthanhtran/sockeye_document_context#Parameters)
