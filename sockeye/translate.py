@@ -314,7 +314,7 @@ class SequencesDocLevel(Iterable):
 
     def __iter__(self):
         for tokens in data_io.read_content_doc(self.path,
-                                               unk=C.UNK_SYMBOL,
+                                               empty_token=C.UNK_SYMBOL,
                                                pre_shift=self.pre_shift,
                                                nxt_shift=self.nxt_shift):
             if len(tokens) == 0:

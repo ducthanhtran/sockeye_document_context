@@ -2022,7 +2022,7 @@ def read_content(path: str, limit: Optional[int] = None) -> Iterator[List[str]]:
 def nxt_shift_iterate(path: str,
                       nxt_shift: int,
                       discarded_sentences: Optional[List[bool]],
-                      unk: str):
+                      empty_token: str):
     with smart_open(path) as indata:
         for _ in range(nxt_shift):
             next(indata)
@@ -2032,19 +2032,17 @@ def nxt_shift_iterate(path: str,
                 continue
             yield line
 
-    unk_sequence = unk
     for _ in range(nxt_shift):
-        yield unk_sequence
+        yield empty_token
 
 
 def pre_shift_iterate(path: str,
                       pre_shift: int,
                       discarded_sentences: Optional[List[bool]],
-                      unk: str,
+                      empty_token: str,
                       last_index: int):
-    unk_sequence = unk
     for _ in range(pre_shift):
-        yield unk_sequence
+        yield empty_token
 
     with smart_open(path) as indata:
         for i, line in enumerate(indata):
@@ -2056,7 +2054,7 @@ def pre_shift_iterate(path: str,
 
 
 def read_content_doc(path: str,
-                     unk: str,
+                     empty_token: str,
                      discarded_sentences: Optional[List[bool]] = None,
                      pre_shift: Optional[int] = None,
                      nxt_shift: Optional[int] = None) -> Iterator[List[str]]:
@@ -2065,7 +2063,7 @@ def read_content_doc(path: str,
     document-level context.
 
     :param path: Path to file containing context sentences.
-    :param unk: Unknown token.
+    :param empty_token: Token for empty sequences.
     :param discarded_sentences: Denotes which line has been discarded due to sequence length being too long for
                                 either current source or current target sentence.
     :param pre_shift: Shift by n previous sentences.
@@ -2080,7 +2078,7 @@ def read_content_doc(path: str,
         for index, line in enumerate(pre_shift_iterate(path,
                                                        pre_shift,
                                                        discarded_sentences,
-                                                       unk,
+                                                       empty_token,
                                                        file_rows - pre_shift)):
             yield list(get_tokens(line))
 
@@ -2092,7 +2090,7 @@ def read_content_doc(path: str,
         for index, line in enumerate(nxt_shift_iterate(path,
                                                        nxt_shift,
                                                        discarded_sentences,
-                                                       unk)):
+                                                       empty_token)):
             yield list(get_tokens(line))
 
     if not already_computed:
@@ -2201,11 +2199,11 @@ class SequenceReaderDoc(SequenceReader):
     """
     Reads sequence samples from path and (optionally) creates integer id sequences.
     Streams from disk, instead of loading all samples into memory. Moreover, we allow shifts, that is,
-    we allow having sequences of <UNK> samples in order to imitate shifts for document-level readers.
+    we allow having empty sequences in order to imitate shifts for document-level readers.
 
-    E.g. if we allow a pre_shift=1 then the first sample be an <UNK>-sequence. Furthermore, we stop one line before the
-    end. Note that we have the same amount of yielded sequences as with no shifts.
-    pre_shift=1 allows us to retrieve previous 1 sentences from path and so on.
+    E.g. if we allow a pre_shift=1 then the first sample is an empty sequence and contains only a special token.
+    Furthermore, we stop one line before the end. Note that we have the same amount of
+    yielded sequences as with no shifts. A pre_shift=1 allows us to retrieve previous 1 sentences from path and so on.
 
     If vocab is None, the sequences in path are assumed to be integers coded as strings.
     Empty sequences are yielded as None.
@@ -2236,7 +2234,7 @@ class SequenceReaderDoc(SequenceReader):
                                        discarded_sentences=self.discarded_sentences,
                                        pre_shift=self.pre_shift,
                                        nxt_shift=self.nxt_shift,
-                                       unk=C.UNK_SYMBOL):
+                                       empty_token=C.EMPTY_SEQUENCE_DOC):
             if self.vocab is not None:
                 sequence = tokens2ids(tokens, self.vocab)
             else:
