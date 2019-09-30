@@ -99,7 +99,7 @@ If you use this software, please cite the following publication
 and
 
 > Felix Hieber, Tobias Domhan, Michael Denkowski, David Vilar, Artem Sokolov, Ann Clifton, Matt Post:
-**The Sockeye Neural Machine Translation Toolkit** at AMTA 2018. AMTA (1) 2018: 200-207
+**[The Sockeye Neural Machine Translation Toolkit](https://arxiv.org/abs/1712.05690)** at AMTA 2018. AMTA (1) 2018: 200-207
 
 ## Parameters
 
