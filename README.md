@@ -94,7 +94,7 @@ zcat ${TEST_SOURCE} | python -m sockeye.translate \
  
 ## Citation
 If you use this software, please cite the following publication
-> Yunsu Kim, Duc Thanh Tran, Hermann Ney: **When and Why is Document-level Context Useful in Neural Machine Translation?** at EMNLP 2019 4th Workshop on Discourse in Machine Translation (DiscoMT 2019), Hong Kong, China, November 2019.
+> Yunsu Kim, Duc Thanh Tran, Hermann Ney: **[When and Why is Document-level Context Useful in Neural Machine Translation?](https://arxiv.org/abs/1910.00294v1)** at EMNLP 2019 4th Workshop on Discourse in Machine Translation (DiscoMT 2019), Hong Kong, China, November 2019.
 
 and
 
